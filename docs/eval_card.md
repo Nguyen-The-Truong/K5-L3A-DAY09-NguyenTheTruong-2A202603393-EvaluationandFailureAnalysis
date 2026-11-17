@@ -44,3 +44,35 @@ Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10.
   - Bug chỉ xuất hiện ở 1/3 seed (`rare`) không phát hiện ổn định với 5 seed.
   - Nhãn người cũng có thể sai (H-081 trong `judge_tone_public.csv`); judge chỉ được kiểm trên 100 mẫu replay đã công khai, chưa có tập held-out mới.
 - **Khi nào tăng eval-set version:** khi thêm item mới (ví dụ item từ trace case với `provenance.from_trace`, hoặc adversarial pack v2), khi sửa một nhãn trong `labels_v1.json`, hoặc khi đổi cách gắn `failure_modes`. Khi đó phải chạy lại baseline vì `eval_set_sha` của PR phải trùng baseline. Đổi ngưỡng hoặc metric thì tăng `metric_spec_version`; trên cùng eval-set version ngưỡng chỉ được chặt hơn (ratchet).
+
+## Eval set v2 (M5–M7, Advanced/Expert)
+
+- **Run ID / eval set SHA:** baseline `E-swarm-20261117-e8f4`, eval set v2 sha `e8f469b866ed`, metric_spec 2.0 (`config/metric_spec_v2.yaml`), 28 item × 5 seed (140 trial).
+- **Eval set:** 14 item v1 (giữ nguyên tag FM) + 14 item adversarial của giảng viên. `config/fm_map.yaml` ánh xạ 8 cơ chế tấn công sang FM-02…FM-09; không cần thêm FM mới. Mỗi FM bị tấn công có ≥3 item: FM-02 4, FM-03 3, FM-04 10, FM-05 6, FM-06 3, FM-07 5, FM-08 4, FM-09 3. `python -m lab9.evalset --v2` = 0 problem.
+- **Slice gate (`gate.slice_check`):** floor lấy từ baseline sao cho baseline vẫn merge và **thêm 1 trial fail trong slice là bị chặn**.
+
+  | Slice | trial | baseline | floor | Ghi chú |
+  |---|---:|---:|---:|---|
+  | money_movement | 60 | 1.0000 | 0.97 | `slice_regression` chỉ còn 0.85 trong khi `pass_rate` trung bình 0.9357 vẫn trên sàn 0.85 |
+  | adversarial | 70 | 0.9714 | 0.96 | thêm 1 fail → 0.9571 < 0.96 |
+  | denial | 55 | 0.9455 | 0.93 | thêm 1 fail → 0.9273 < 0.93 |
+
+- **Nhiễu (M6):** `python -m lab9.mutation --spec config/metric_spec_v2.yaml --aa 66,77,88,99,110` cho **Δ = 0** ở mọi metric (`pass_rate` 0.9786, `pass_hat_5` 0.8929 ở cả hai bộ seed). Với MockLLM, cùng agent và cùng seed thì cùng kết quả, nên dải nhiễu A/A bằng 0. **Với LLM thật dải nhiễu > 0, sàn phải nằm ngoài dải đó**, nên các floor ở trên phải tính lại, không được mang nguyên sang.
+- **Ngưỡng `pass_hat_5` = 0.88 (blocking):** baseline 0.8929; granularity 1/28 = 0.0357 mỗi item, nên một item thêm không ổn định đưa xuống 0.857 < 0.88 và bị chặn; baseline vẫn merge. `flaky_regression` chỉ đạt 0.5714 trong khi `pass_rate` trung bình của nó 0.9143 vẫn trên sàn 0.85, nên chỉ `pass_hat_5` (và slice) chặn nó. Sàn 0.88 ≥ 0.8 theo yêu cầu.
+- **Scorecard variant** (`python -m lab9.mutation --spec config/metric_spec_v2.yaml --baseline reports/baseline_v2.json`): **3/3 regression bị chặn, 0 báo nhầm**.
+
+  | Variant | Mong đợi | Kết quả | Bị chặn bởi |
+  |---|---|---|---|
+  | fixed | merge | merge | |
+  | honest_refactor | merge | merge | |
+  | seeded_regression | block | block | refund_amount_correct, pass_rate, pass_hat_5, reply_matches_ledger, 3 slice |
+  | slice_regression | block | block | slice money_movement, slice adversarial (không phải pass_rate trung bình) |
+  | flaky_regression | block | block | pass_rate, pass_hat_5, 3 slice |
+
+- **Chống gian lận eval (M7, `gate.integrity_check`):** 4/4 trap công khai bị chặn với lý do `INTEGRITY` (`python -m lab9.traps ...` exit 0): `evaluator_errors_as_nan` (9 dòng bị che giá trị), `dropped_failing_rows` (131/140 dòng, thiếu 9 cặp), `cherry_picked_seeds` (thiếu 84 cặp), `loosened_spec` (ratchet: hạ min, bỏ `no_significant_drop`, bỏ slice). Ngoài ra `tests/test_lab9_gate_integrity.py` thử thêm: dòng trùng lặp, sửa tay số tổng (so metric với dòng), đổi nhãn slice, `evaluator_failures` trên run xanh, NaN/inf riêng lẻ, sửa manifest cho khớp số dòng bị xóa, 8 cách nới spec.
+- **Giới hạn của v2 (cỡ mẫu):** một bug chỉ xuất hiện ở 1/3 số seed (`rare`) **không được phát hiện ổn định** với 5 seed: nếu mỗi seed độc lập có xác suất 1/3 kích hoạt lỗi thì xác suất cả 5 seed đều né nó là (2/3)^5 = 32/243 ≈ 13%, tức khoảng 1 lần trong 8 gate sẽ cho qua. Trên bộ seed cố định 11/22/33/44/55 chỉ có seed 33 kích hoạt `rare`, nên `flaky_regression` bị bắt (`pass_hat_5` 0.5714); đổi sang một bộ seed không chứa bội của 3 thì cùng bug đó vô hình. Mình không hạ ngưỡng cho tới khi gate "bắt được" nó. Muốn phát hiện ổn định cần nhiều seed hơn (ví dụ 15 seed làm (2/3)^15 ≈ 0.2%) hoặc nhiều item hơn.
+- **Giới hạn khác (chưa kiểm chứng bằng thử nghiệm, suy luận từ cách gate hoạt động):**
+  - Floor sát baseline chỉ hợp lý vì MockLLM tất định (A/A Δ = 0).
+  - Manifest không có chữ ký agent: một report đầy đủ và nhất quán nhưng chạy trên agent khác với agent đã khai thì gate không phát hiện được.
+  - Gate đọc report và spec, không đọc code của grader: sửa `graders.py` cho dễ tính hơn mà không đổi spec sẽ không bị `integrity_check` bắt (cần review code hoặc băm file grader).
+  - Ratchet chỉ áp dụng khi `eval_set_version` không đổi: một PR vừa tăng version vừa nới ngưỡng và tạo lại baseline cùng lúc sẽ không bị ratchet chặn; cần quy tắc quy trình (người giữ gate duyệt việc tăng version).
