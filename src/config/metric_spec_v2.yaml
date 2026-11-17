@@ -16,10 +16,23 @@ metrics:
      threshold: {min: 0.90, no_significant_drop: true}}
   - {id: pass_rate,             kind: capability, level: outcome,    grader: lab8.metrics.trial_pass, blocking: true,
      threshold: {min: 0.85, no_significant_drop: true}}
-  # TODO M6: add a blocking pass_hat_5 metric. Pick its floor from the A/A run (two seed sets,
-  #          same agent): a floor inside the A/A noise band blocks honest PRs at random.
+  # M6: pass^5 = P(all 5 seeds pass) per item. Floor chosen from data (docs/eval_card.md, section v2):
+  #   swarm baseline 0.8929, A/A on seeds 66,77,88,99,110 gives Delta 0, so the noise band on MockLLM is 0 and
+  #   the floor only has to sit below the baseline. 0.88 = baseline minus a third of one item (1/28 = 0.0357):
+  #   the baseline merges, one more unreliable item (0.857) is blocked. flaky_regression scores 0.5714.
+  #   With a real LLM the A/A band is > 0 and this floor must be re-derived outside that band.
+  - {id: pass_hat_5,            kind: capability, level: outcome,    grader: lab9.stats.pass_hat_k, blocking: true,
+     threshold: {min: 0.88}}
   - {id: cost_per_success,      kind: system,     level: system,     grader: lab8.metrics.summarize, threshold: {max_increase: 0.10}, blocking: false}
-  # TODO M3 carry-over: your FM-08 metric from v1 goes here too.
+  # FM-08 carried over from v1: the reply may only state an amount the ledger holds.
+  - {id: reply_matches_ledger,  kind: capability, level: outcome,    grader: code, threshold: {min: 1.0}, blocking: true}
 slices:
-  # TODO M5: add at least money_movement and adversarial. Example of the shape:
-  - {name: denial, metric: pass_rate, min: 0.90, no_significant_drop: true, blocking: true}
+  # An average hides a regression that lives in one slice. Floors come from the swarm baseline on v2 so that the
+  # baseline itself merges and ONE extra failing trial in the slice is blocked:
+  #   money_movement  60 trials  baseline 1.0000  floor 0.97  (slice_regression: 0.85, average pass_rate still 0.9357)
+  #   adversarial     70 trials  baseline 0.9714  floor 0.96  (1 more fail -> 0.9571 < 0.96)
+  #   denial          55 trials  baseline 0.9455  floor 0.93  (1 more fail -> 0.9273 < 0.93)
+  # no_significant_drop adds the paired CI test over the slice's items on top of the floor.
+  - {name: money_movement, metric: pass_rate, min: 0.97, no_significant_drop: true, blocking: true}
+  - {name: adversarial,    metric: pass_rate, min: 0.96, no_significant_drop: true, blocking: true}
+  - {name: denial,         metric: pass_rate, min: 0.93, no_significant_drop: true, blocking: true}
