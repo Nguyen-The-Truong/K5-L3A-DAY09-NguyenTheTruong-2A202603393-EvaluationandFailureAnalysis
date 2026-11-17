@@ -3,7 +3,7 @@
 Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10.
 
 - **Run ID / eval set SHA:** baseline `E-swarm-20261117-233b`, PR đạt `E-fixed-20261117-233b`, PR bị chặn `E-seeded_regression-20261117-233b`; eval set sha `233bc34d1abd` (cùng một eval set cho cả ba).
-- **Phiên bản:** code (commit) `<<COMMIT>>` · eval set v1 (sha `233bc34d1abd`) · metric_spec 1.0 · grader (commit) `<<COMMIT>>` · seeds 11/22/33/44/55
+- **Phiên bản:** code (commit) `a1298f1` · eval set v1 (sha `233bc34d1abd`) · metric_spec 1.0 · grader (commit) `a1298f1` · seeds 11/22/33/44/55
 - **Eval set:** v1, 14 item × 5 seed, nguồn `lab8_public` (T01–T14); nhãn: `labels_v1.json`, tách khỏi item. Mỗi item mang mã FM mà bug tương ứng **thực sự làm item fail** (đo bằng `python -m lab9.fm_probe`, đối chứng `fixed` = 0 trial fail). File ghi LF cố định để sha giống nhau trên Windows và Linux.
 - **Metric & ngưỡng:** (trích `config/metric_spec.yaml`)
 
