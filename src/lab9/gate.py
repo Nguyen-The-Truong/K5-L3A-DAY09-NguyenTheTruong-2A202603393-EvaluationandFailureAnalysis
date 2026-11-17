@@ -126,6 +126,20 @@ def integrity_check(pr: dict, base: dict, spec: dict, base_spec: dict | None = N
             problems += _loosened({k: bs[k] for k in ("min", "no_significant_drop") if k in bs},
                                   {k: x[k] for k in ("min", "no_significant_drop") if k in x}, tag)
 
+        bg = base_spec.get("regression_guard")
+        if bg:
+            ng = spec.get("regression_guard")
+            if not ng:
+                problems.append("regression_guard was removed from the spec")
+            else:
+                if int(ng.get("max_new_failures", 0)) > int(bg.get("max_new_failures", 0)):
+                    problems.append(f"regression_guard: max_new_failures raised {bg.get('max_new_failures', 0)} -> {ng.get('max_new_failures', 0)} (looser)")
+                dropped = sorted(set(bg.get("metrics") or []) - set(ng.get("metrics") or []))
+                if dropped:
+                    problems.append(f"regression_guard: metric(s) {dropped} no longer guarded")
+                if bg.get("blocking", True) and not ng.get("blocking", True):
+                    problems.append("regression_guard is no longer blocking")
+
     # 7. Slice tags are derived from labels: the same item must carry the same tags as on main.
     def tags(rep: dict) -> dict:
         return {r["item_id"]: sorted(r.get("slices") or []) for r in rep.get("rows") or []}
@@ -177,6 +191,36 @@ def slice_check(pr: dict, base: dict, spec: dict) -> tuple[list[str], list[str]]
     return blocked, lines
 
 
+def regression_guard(pr: dict, base: dict, spec: dict) -> tuple[list[str], list[str]]:
+    """Per-trial regression guard. Thresholds and slice means compare AGGREGATES, so a PR that fails exactly as
+    many trials as main, just on other (item, seed) pairs, looks identical. A trial that passed on main and fails
+    in the PR is a regression no matter what the average says.
+
+    spec["regression_guard"] = {"metrics": [...], "max_new_failures": 0, "blocking": true}
+    Counts (item, seed) pairs where the baseline value is True and the PR value is False, per metric.
+    Return (blocked ids like "regression:pass_rate", report lines).
+
+    Honest limit: this is only meaningful when reruns are deterministic (MockLLM, A/A delta = 0). With a real
+    LLM, trial-level flips are noise and `max_new_failures` must be derived from the A/A flip rate instead."""
+    cfg = spec.get("regression_guard")
+    if not cfg:
+        return [], []
+    blocked: list[str] = []
+    lines: list[str] = []
+    allowed = int(cfg.get("max_new_failures", 0))
+    base_rows = {(r["item_id"], r["seed"]): r for r in base.get("rows") or []}
+    for metric in cfg.get("metrics") or []:
+        new = sorted((r["item_id"], r["seed"]) for r in pr.get("rows") or []
+                     if r.get(metric) is False and (base_rows.get((r["item_id"], r["seed"])) or {}).get(metric) is True)
+        fail = len(new) > allowed
+        if fail and cfg.get("blocking", True):
+            blocked.append(f"regression:{metric}")
+        shown = ", ".join(f"{i}@{sd}" for i, sd in new[:3]) + (" ..." if len(new) > 3 else "")
+        label = "ok" if not fail else ("BLOCK" if cfg.get("blocking", True) else "warn")
+        lines.append(f"  {'regression:' + metric:<34} {len(new):<8} {json.dumps({'max_new_failures': allowed}):<40} {shown:<28} {label}")
+    return blocked, lines
+
+
 def check(pr: dict, base: dict, spec: dict, base_spec: dict | None = None) -> tuple[list[str], list[str]]:
     if pr["manifest"]["eval_set_sha"] != base["manifest"]["eval_set_sha"]:
         return ["eval_set_sha"], ["  EVAL SET differs from the baseline's: re-run the baseline on the same eval set"]
@@ -213,6 +257,10 @@ def check(pr: dict, base: dict, spec: dict, base_spec: dict | None = None) -> tu
         sb, sl = slice_check(pr, base, spec)
         blocked += sb
         lines += sl
+    if spec.get("regression_guard"):
+        gb, gl = regression_guard(pr, base, spec)
+        blocked += gb
+        lines += gl
     return blocked, lines
 
 

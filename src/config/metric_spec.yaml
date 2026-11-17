@@ -17,3 +17,8 @@ metrics:
   - {id: cost_per_success,      kind: system,     level: system,     grader: lab8.metrics.summarize, threshold: {max_increase: 0.10}, blocking: false}
   # FM-08: the reply may only state an amount the ledger holds. Code grader reads reply events + ledger.
   - {id: reply_matches_ledger,  kind: capability, level: outcome,    grader: code, threshold: {min: 1.0}, blocking: true}
+  # FM-02 / FM-05: status, full-quote proposal_amount and the host's policy_denied audit must match the label.
+  # Added after `lab9.mutation --detect` showed 75% (< 80%): E-013 under seeded_regression left no trace for the
+  # ledger-only graders (the agent refused by itself, so ledger and reply were both 'correct').
+  - {id: decision_correct,      kind: capability, level: outcome,    grader: code, blocking: true,
+     threshold: {min: 0.95, no_significant_drop: true}}

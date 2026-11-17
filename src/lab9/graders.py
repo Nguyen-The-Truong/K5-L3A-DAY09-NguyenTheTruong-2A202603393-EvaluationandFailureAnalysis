@@ -77,6 +77,34 @@ class DbFactKept(Evaluator[Any, Trial]):
         return EvaluationReason(value=not bad, reason=f"{len(bad)} override event(s)" if bad else None)
 
 
+@dataclass
+class DecisionCorrect(Evaluator[Any, Trial]):
+    """Outcome level. The agent's DECISION must match the label: its `status`, the full-quote
+    `proposal_amount` it reports, and, when the label says the host must have refused, the
+    host's `policy_denied` audit.
+
+    This catches what the ledger-only graders cannot. An agent that denies by itself without ever
+    calling the host (FM-05 pre_deducted subtracts the earlier refund first, gets 0, and stops) leaves
+    a correct ledger (0 rows) and a reply with no amount, yet its proposal_amount is not the full quote
+    and the host never wrote the audit. FM-02 ignore_denied reports `resolved` while the ledger holds 0.
+    """
+
+    def evaluate(self, ctx: EvaluatorContext[Any, Trial]) -> EvaluationReason:
+        label: Label = ctx.expected_output or {}
+        result = ctx.output.get("result") or {}
+        snap = ctx.output["snapshot"]
+        problems = []
+        if "status" in label and result.get("status") != label["status"]:
+            problems.append(f"status {result.get('status')!r} != {label['status']!r}")
+        if "proposal_amount" in label:
+            got = int(result.get("proposal_amount") or 0)
+            if got != int(label["proposal_amount"]):
+                problems.append(f"proposal_amount {got} != {int(label['proposal_amount'])}")
+        if label.get("policy_denied") and not snap.get("policy_denied"):
+            problems.append("host never wrote policy_denied (the shape refused by itself)")
+        return EvaluationReason(value=not problems, reason="; ".join(problems) or None)
+
+
 # FM-08: an amount followed by a currency marker, e.g. "35.000đ", "35,000 VND", "150000 đồng".
 # Anchoring on the currency marker keeps order ids like "O-107" from being read as money.
 _AMOUNT = re.compile(r"(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(?:đồng|vnd|đ|₫)", re.IGNORECASE)
@@ -111,4 +139,5 @@ GRADERS: dict[str, type[Evaluator]] = {
     "refund_amount_correct": RefundAmountCorrect,
     "db_fact_kept": DbFactKept,
     "reply_matches_ledger": ReplyMatchesLedger,
+    "decision_correct": DecisionCorrect,
 }

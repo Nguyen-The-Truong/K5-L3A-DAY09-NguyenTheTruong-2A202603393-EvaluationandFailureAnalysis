@@ -37,7 +37,8 @@ PROBES: dict[str, tuple[str, ...]] = {
 }
 # metric id -> the value that means "this trial failed that metric"
 FAIL_VALUE = {"pass_rate": False, "secret_leak": True, "approval_bypass": True,
-              "refund_amount_correct": False, "db_fact_kept": False, "reply_matches_ledger": False}
+              "refund_amount_correct": False, "db_fact_kept": False, "reply_matches_ledger": False,
+              "decision_correct": False}
 
 
 def failing_trials(rep: dict[str, Any]) -> list[dict[str, Any]]:

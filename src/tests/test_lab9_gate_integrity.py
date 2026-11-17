@@ -170,3 +170,68 @@ def test_committed_v2_baseline_is_trustworthy_and_merges_against_itself(gate):
     blocked, _ = gate.check(base, base, spec, spec)
     assert blocked == [], "the baseline must merge against itself or every PR is blocked"
     assert spec["metrics"][[m["id"] for m in spec["metrics"]].index("pass_hat_5")]["threshold"]["min"] >= 0.8
+
+
+# --- regression_guard: same score as main, different failing trials ---------------------------------------
+
+GUARD_SPEC = {**SPEC, "regression_guard": {"metrics": ["pass_rate"], "max_new_failures": 0, "blocking": True}}
+
+
+def test_same_failure_count_on_other_trials_is_invisible_to_thresholds_but_not_to_the_guard(gate):
+    base = make_report(fail={(0, 1)})                        # main already fails one trial
+    pr = make_report(fail={(0, 2)})                          # the PR fails one too, a DIFFERENT trial
+    assert pr["metrics"] == base["metrics"]                  # every average is identical
+    blocked, _ = gate.check(pr, base, SPEC, None)
+    assert blocked == [], "without the guard the gate cannot tell them apart"
+    blocked, lines = gate.check(pr, base, GUARD_SPEC, None)
+    assert blocked == ["regression:pass_rate"]
+    assert "E-0@2" in lines[-1] and "BLOCK" in lines[-1]
+
+
+def test_guard_does_not_flag_fixes_or_an_identical_run(gate):
+    base = make_report(fail={(0, 1), (1, 2)})
+    assert gate.regression_guard(base, base, GUARD_SPEC) == ([], [gate.regression_guard(base, base, GUARD_SPEC)[1][0]])
+    assert gate.regression_guard(make_report(), base, GUARD_SPEC)[0] == []            # fewer failures than main: fine
+    assert gate.regression_guard(make_report(fail={(0, 1)}), base, GUARD_SPEC)[0] == []   # a strict subset of main's failures
+
+
+def test_guard_allowance_and_non_blocking_mode(gate):
+    base = make_report()
+    pr = make_report(fail={(2, 3)})
+    assert gate.regression_guard(pr, base, GUARD_SPEC)[0] == ["regression:pass_rate"]
+    lenient = {**SPEC, "regression_guard": {"metrics": ["pass_rate"], "max_new_failures": 1, "blocking": True}}
+    assert gate.regression_guard(pr, base, lenient)[0] == []
+    advisory = {**SPEC, "regression_guard": {"metrics": ["pass_rate"], "max_new_failures": 0, "blocking": False}}
+    blocked, lines = gate.regression_guard(pr, base, advisory)
+    assert blocked == [] and "warn" in lines[0]
+
+
+def test_guard_ignores_trials_with_no_value_and_spec_without_a_guard(gate):
+    base = make_report()
+    assert gate.regression_guard(base, base, SPEC) == ([], [])                         # no guard configured
+    pr = make_report(fail={(2, 3)})
+    row = next(r for r in pr["rows"] if (r["item_id"], r["seed"]) == ("E-2", 3))         # the failing trial itself
+    row["pass_rate"] = None                                                             # masked: integrity_check's job, not the guard's
+    assert gate.regression_guard(pr, base, GUARD_SPEC)[0] == []
+
+
+@pytest.mark.parametrize("edit,needle", [
+    (lambda s: s.pop("regression_guard"), "regression_guard was removed"),
+    (lambda s: s["regression_guard"].__setitem__("max_new_failures", 3), "max_new_failures raised"),
+    (lambda s: s["regression_guard"].__setitem__("metrics", []), "no longer guarded"),
+    (lambda s: s["regression_guard"].__setitem__("blocking", False), "no longer blocking"),
+])
+def test_the_guard_cannot_be_loosened_or_removed_on_the_same_eval_set(gate, edit, needle):
+    base = make_report()
+    loose = copy.deepcopy(GUARD_SPEC)
+    edit(loose)
+    assert any(needle in p for p in gate.integrity_check(base, base, loose, GUARD_SPEC)), needle
+    assert gate.integrity_check(base, base, GUARD_SPEC, GUARD_SPEC) == []
+
+
+def test_committed_v2_spec_turns_the_guard_on():
+    import yaml
+
+    spec = yaml.safe_load((ROOT / "config/metric_spec_v2.yaml").read_text(encoding="utf-8"))
+    g = spec["regression_guard"]
+    assert g["blocking"] is True and g["max_new_failures"] == 0 and "pass_rate" in g["metrics"]
