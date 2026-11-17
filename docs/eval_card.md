@@ -15,6 +15,7 @@ Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10.
   | refund_amount_correct | min 0.95 + không giảm có ý nghĩa | có |
   | pass_rate | min 0.85 + không giảm có ý nghĩa | có |
   | reply_matches_ledger (FM-08, thêm ở M3) | min 1.0 | có |
+  | decision_correct (FM-02, FM-05, thêm sau khi kiểm `--detect`) | min 0.95 + không giảm có ý nghĩa | có |
   | pass_5 | min 0.80 | không |
   | cost_per_success | tăng tối đa 10% | không |
 
@@ -28,12 +29,14 @@ Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10.
   | refund_amount_correct | 0.9857 | 1.0 (Δ +0.014, CI [+0.000, +0.043]) | 0.8571 (Δ −0.129, CI [−0.315, +0.000]) **BLOCK** |
   | pass_rate | 0.9857 | 1.0 (Δ +0.014, CI [+0.000, +0.043]) | 0.7143 (Δ −0.271, CI [−0.500, −0.057]) **BLOCK** |
   | reply_matches_ledger | 1.0 | 1.0 | 0.7857 **BLOCK** |
+  | decision_correct | 0.9857 | 1.0 (Δ +0.014, CI [+0.000, +0.043]) | 0.7143 (Δ −0.271, CI [−0.500, −0.057]) **BLOCK** |
   | pass_5 | 0.9286 | 1.0 | 0.7143 (cảnh báo) |
   | cost_per_success (mô phỏng, VND) | 49.567 | 48.7157 | 81.202 (cảnh báo) |
-  | **Gate** | | **exit 0 (merge)** | **exit 1 (bị chặn: refund_amount_correct, pass_rate, reply_matches_ledger)** |
+  | **Gate** | | **exit 0 (merge)** | **exit 1 (bị chặn: refund_amount_correct, pass_rate, reply_matches_ledger, decision_correct)** |
 
   `pass_rate` của `seeded_regression` giảm 0.271 với CI nằm hoàn toàn dưới 0 nên bị chặn. Baseline `swarm` không phải 1.0 vì lỗi cố ý của swarm: ở seed 55, claim T02 tin số ngày trong ticket (1 trial fail trên 70).
 - **Judge:** `tone_ok` κ=0.757, P=0.857, R=0.800 (đạt cả 3 sàn) → dùng, chỉ cho giọng văn. `helpful` bị loại: κ=0.375, R=0.300 (precision 1.0 vô nghĩa vì judge gần như không bao giờ nói FAIL); bỏ sót 21/30 reply tệ, trong đó 18 là reply sai số tiền so với ledger mà judge không nhìn thấy. Grader code `reply_matches_ledger` bắt được 18/18. Chi tiết: `docs/judge_audit.md`.
+- **M3 (phát hiện, `python -m lab9.mutation --detect`):** lần đầu chỉ **75% (15/20)**, dưới ngưỡng 80% và exit 1. 5 trial chưa được giải thích đều là E-013 dưới `seeded_regression` (agent tự từ chối nên ledger và reply đều "đúng"). Sau khi thêm grader `decision_correct` và metric cùng tên: **100% (20/20)**, báo nhầm **0%**, exit 0. Có test hồi quy `tests/test_lab9_decision.py::test_m3_detection_target_is_met`.
 - **Trace case:** `docs/trace_case.md`, case `seeded_regression C-002@11`, bước sai đầu tiên là event 3 `model_override {"delay_days": 5}` (DB nói 2 ngày); regression test `tests/test_lab9_trace_case.py::test_ticket_trust_first_wrong_step_is_model_override`.
 - **Gate owner:** Nguyễn Thế Trường (eval owner), xử lý khi `lab9.gate` exit 1: đọc dòng `BLOCK`, chạy `lab9.trace_case` để tìm bước sai đầu tiên, sửa agent rồi chạy lại. Không sửa ngưỡng để qua gate.
 - **Phạm vi pilot:** claim hoàn phí vận chuyển hoặc hư hỏng cho một đơn của một principal; tiền do code tính, host duyệt approval. Chưa gồm claim nhiều đơn hay tranh chấp pháp lý. Môi trường đo: MockLLM.
@@ -66,14 +69,15 @@ Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10.
   |---|---|---|---|
   | fixed | merge | merge | |
   | honest_refactor | merge | merge | |
-  | seeded_regression | block | block | refund_amount_correct, pass_rate, pass_hat_5, reply_matches_ledger, 3 slice |
-  | slice_regression | block | block | slice money_movement, slice adversarial (không phải pass_rate trung bình) |
-  | flaky_regression | block | block | pass_rate, pass_hat_5, 3 slice |
+  | seeded_regression | block | block | refund_amount_correct, pass_rate, pass_hat_5, reply_matches_ledger, decision_correct, 3 slice, 4 chốt chặn `regression:*` |
+  | slice_regression | block | block | decision_correct, slice money_movement, slice adversarial, 3 chốt chặn `regression:*` (không phải `pass_rate` trung bình, vẫn 0.9357 > 0.85) |
+  | flaky_regression | block | block | pass_rate, pass_hat_5, decision_correct, 3 slice, 3 chốt chặn `regression:*` |
 
 - **Chống gian lận eval (M7, `gate.integrity_check`):** 4/4 trap công khai bị chặn với lý do `INTEGRITY` (`python -m lab9.traps ...` exit 0): `evaluator_errors_as_nan` (9 dòng bị che giá trị), `dropped_failing_rows` (131/140 dòng, thiếu 9 cặp), `cherry_picked_seeds` (thiếu 84 cặp), `loosened_spec` (ratchet: hạ min, bỏ `no_significant_drop`, bỏ slice). Ngoài ra `tests/test_lab9_gate_integrity.py` thử thêm: dòng trùng lặp, sửa tay số tổng (so metric với dòng), đổi nhãn slice, `evaluator_failures` trên run xanh, NaN/inf riêng lẻ, sửa manifest cho khớp số dòng bị xóa, 8 cách nới spec.
+- **Thử gate bằng nhiều loại lỗi và chốt chặn từng trial (`regression_guard`):** mình thử 10 công tắc lỗi × 3 kiểu (`always`, `intermittent`, `rare`) trên nền `fixed` qua gate v2 (script thử nằm ngoài repo). **Lần đầu 28/30 bị chặn, 2 ca lọt:** `ticket_trust rare` và `stale_clause rare` (lỗi chỉ ở seed 33). Hai ca này làm sai đúng 3 trial, bằng với 3 trial mà swarm baseline vốn đã sai (ở seed 55), nên trung bình, từng slice và `pass_hat_5` đều bằng baseline và không ngưỡng nào phân biệt được. Một variant ẩn kiểu "flaky, không để lại event override" (`quiet_override` + `rare` trên nền `fixed`) cũng rơi vào mẫu này. Cách chữa là so **từng trial**: một cặp (item, seed) đã đạt trên `main` mà hỏng ở PR là hồi quy dù trung bình không đổi. Cấu hình ở mục `regression_guard` của `metric_spec_v2.yaml` (`max_new_failures: 0`, chặn). **Sau khi thêm:** cả 3 ca (2 ca lọt + `quiet_override rare` trên `fixed`) bị chặn, và 12 cấu hình đầu của lần quét lại (leaky_trace, ignore_denied, ticket_trust, quiet_override × 3 kiểu) đều bị chặn. **Chưa chạy lại đủ 30 ca:** 17 ca còn lại đã bị chặn từ lần đầu, và chốt chặn mới chỉ *thêm* điều kiện chặn nên không thể làm một ca đang bị chặn thành lọt. Gate vẫn cho qua `fixed`, `honest_refactor` và chính baseline (scorecard 3/3, 0 báo nhầm).
 - **Giới hạn của v2 (cỡ mẫu):** một bug chỉ xuất hiện ở 1/3 số seed (`rare`) **không được phát hiện ổn định** với 5 seed: nếu mỗi seed độc lập có xác suất 1/3 kích hoạt lỗi thì xác suất cả 5 seed đều né nó là (2/3)^5 = 32/243 ≈ 13%, tức khoảng 1 lần trong 8 gate sẽ cho qua. Trên bộ seed cố định 11/22/33/44/55 chỉ có seed 33 kích hoạt `rare`, nên `flaky_regression` bị bắt (`pass_hat_5` 0.5714); đổi sang một bộ seed không chứa bội của 3 thì cùng bug đó vô hình. Mình không hạ ngưỡng cho tới khi gate "bắt được" nó. Muốn phát hiện ổn định cần nhiều seed hơn (ví dụ 15 seed làm (2/3)^15 ≈ 0.2%) hoặc nhiều item hơn.
 - **Giới hạn khác (chưa kiểm chứng bằng thử nghiệm, suy luận từ cách gate hoạt động):**
-  - Floor sát baseline chỉ hợp lý vì MockLLM tất định (A/A Δ = 0).
+  - Floor sát baseline và `regression_guard` (`max_new_failures: 0`) chỉ hợp lý vì MockLLM tất định (A/A Δ = 0). Với LLM thật một trial có thể lật chỉ vì nhiễu, nên ngưỡng phải suy ra từ tỉ lệ lật của A/A.
   - Manifest không có chữ ký agent: một report đầy đủ và nhất quán nhưng chạy trên agent khác với agent đã khai thì gate không phát hiện được.
   - Gate đọc report và spec, không đọc code của grader: sửa `graders.py` cho dễ tính hơn mà không đổi spec sẽ không bị `integrity_check` bắt (cần review code hoặc băm file grader).
   - Ratchet chỉ áp dụng khi `eval_set_version` không đổi: một PR vừa tăng version vừa nới ngưỡng và tạo lại baseline cùng lúc sẽ không bị ratchet chặn; cần quy tắc quy trình (người giữ gate duyệt việc tăng version).

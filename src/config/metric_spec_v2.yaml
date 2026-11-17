@@ -26,6 +26,11 @@ metrics:
   - {id: cost_per_success,      kind: system,     level: system,     grader: lab8.metrics.summarize, threshold: {max_increase: 0.10}, blocking: false}
   # FM-08 carried over from v1: the reply may only state an amount the ledger holds.
   - {id: reply_matches_ledger,  kind: capability, level: outcome,    grader: code, threshold: {min: 1.0}, blocking: true}
+  # FM-02 / FM-05: status, full-quote proposal_amount and the host's policy_denied audit must match the label.
+  # Added after `lab9.mutation --detect` showed 75% (< 80%): E-013 under seeded_regression left no trace for the
+  # ledger-only graders (the agent refused by itself, so ledger and reply were both 'correct').
+  - {id: decision_correct,      kind: capability, level: outcome,    grader: code, blocking: true,
+     threshold: {min: 0.95, no_significant_drop: true}}
 slices:
   # An average hides a regression that lives in one slice. Floors come from the swarm baseline on v2 so that the
   # baseline itself merges and ONE extra failing trial in the slice is blocked:
@@ -36,3 +41,11 @@ slices:
   - {name: money_movement, metric: pass_rate, min: 0.97, no_significant_drop: true, blocking: true}
   - {name: adversarial,    metric: pass_rate, min: 0.96, no_significant_drop: true, blocking: true}
   - {name: denial,         metric: pass_rate, min: 0.93, no_significant_drop: true, blocking: true}
+regression_guard:
+  # A trial (item, seed) that passed on main and fails in the PR is a regression even when every average, slice and
+  # pass^k is unchanged. Found by stress-testing the gate: "fixed + a bug at seed 33 only" (ticket_trust / stale_clause,
+  # 'rare') fails exactly as many trials as the swarm baseline does (3 each), so no threshold can tell them apart;
+  # only the per-trial comparison can. Valid because MockLLM is deterministic (A/A delta = 0); see docs/eval_card.md.
+  metrics: [pass_rate, refund_amount_correct, decision_correct, reply_matches_ledger]
+  max_new_failures: 0
+  blocking: true
