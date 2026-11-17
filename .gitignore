@@ -1,5 +1,22 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python / OS
+.venv/
 __pycache__/
-*.pyc
-src/reports/
-src/traces/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+
+# Runtime output (code lives in src/, every command runs from src/)
 *.sqlite
+*.sqlite-*
+traces/
+src/traces/
+src/reports/
+
+# Instructor / hidden material. Never push it.
+student_drop/
+src/eval/instructor/
