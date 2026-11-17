@@ -48,6 +48,7 @@ Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10.
 ## Eval set v2 (M5–M7, Advanced/Expert)
 
 - **Run ID / eval set SHA:** baseline `E-swarm-20261117-e8f4`, eval set v2 sha `e8f469b866ed`, metric_spec 2.0 (`config/metric_spec_v2.yaml`), 28 item × 5 seed (140 trial).
+- **Phiên bản:** code + grader (commit) `0a4a706` · eval set v2 (sha `e8f469b866ed`) · metric_spec 2.0 · seeds 11/22/33/44/55
 - **Eval set:** 14 item v1 (giữ nguyên tag FM) + 14 item adversarial của giảng viên. `config/fm_map.yaml` ánh xạ 8 cơ chế tấn công sang FM-02…FM-09; không cần thêm FM mới. Mỗi FM bị tấn công có ≥3 item: FM-02 4, FM-03 3, FM-04 10, FM-05 6, FM-06 3, FM-07 5, FM-08 4, FM-09 3. `python -m lab9.evalset --v2` = 0 problem.
 - **Slice gate (`gate.slice_check`):** floor lấy từ baseline sao cho baseline vẫn merge và **thêm 1 trial fail trong slice là bị chặn**.
 
