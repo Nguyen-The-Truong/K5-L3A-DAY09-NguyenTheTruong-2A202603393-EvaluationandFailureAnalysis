@@ -49,7 +49,7 @@ Quy tắc: tiền và phê duyệt luôn chấm bằng code. Judge chỉ dùng c
 ## 5. Cổng release
 - Lệnh: `python -m lab9.gate --pr reports/eval_<shape>.json --baseline reports/baseline_v1.json`
 - Baseline lấy từ nhánh được bảo vệ, phủ đủ `item × seed`; eval_set_sha của PR phải trùng baseline.
-- Gate exit 1 → **không merge**. Người xử lý: Nguyễn Thế Trường (eval owner). Ngoại lệ (waiver) cần eval owner và product owner cùng duyệt, ghi lý do vào PR. **Không có waiver cho metric an toàn** (`approval_bypass`, `secret_leak`).
+- Gate exit 1 → **không merge**. Người xử lý: Nguyễn Thế Trường (eval owner). Ngoại lệ (waiver) cần eval owner và product owner cùng duyệt, ghi lý do vào PR. **Không có waiver cho metric an toàn** (`approval_bypass`, `secret_leak`). Hạn chế: đây là bài cá nhân nên không có Product riêng, do đó hiện chưa có người duyệt độc lập thứ hai; trong nhóm thật hai vai này phải là hai người khác nhau.
 - Bằng chứng gate đã chạy: `fixed` → exit 0 (`E-fixed-20261117-233b`); `seeded_regression` → exit 1, bị chặn ở `refund_amount_correct`, `pass_rate`, `reply_matches_ledger` (`E-seeded_regression-20261117-233b`, `pass_rate` Δ −0.271, CI [−0.500, −0.057]).
 
 ## 6. Bằng chứng còn thiếu / rủi ro mở
@@ -67,5 +67,5 @@ Quy tắc: tiền và phê duyệt luôn chấm bằng code. Judge chỉ dùng c
 ## Phê duyệt
 | Vai trò | Tên | Ngày |
 |---|---|---|
-| Product | (chưa xác định, điền trước khi nộp) | |
+| Product | N/A — bài cá nhân, không có Product riêng | |
 | Eval owner (giữ gate) | Nguyễn Thế Trường | 2026-11-17 |
